@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/joho/godotenv"
 )
 
 type Product struct {
@@ -33,9 +36,19 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func connectToDB(connString string) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error accessing .env file")
+	}
+
 	log.Println("[DB] Establishing connection...", connString)
 
-	dsn := "host=localhost user=postgres password=Dhruv@PSQL dbname=mydb port=5432"
+	dsn := os.Getenv("DSN")
+	log.Println(dsn)
+	if dsn == "" {
+		log.Fatal("[DB] No data source name provided")
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatal("[DB] Failed to connect to database")
