@@ -44,7 +44,6 @@ func connectToDB(connString string) {
 	log.Println("[DB] Establishing connection...", connString)
 
 	dsn := os.Getenv("DSN")
-	log.Println(dsn)
 	if dsn == "" {
 		log.Fatal("[DB] No data source name provided")
 	}
