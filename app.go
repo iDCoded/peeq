@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -139,5 +140,51 @@ func (a *App) DeleteConnection(id uint) error {
 	}
 
 	log.Printf("[Config] Deleted connection with ID: %d", id)
+	return nil
+}
+
+// ConnectToDatabase establishes a connection to a database specified by the given connection ID.
+// It retrieves the connection configuration from the configDB, opens the database using GORM based on the connection type,
+// and tests the connection by pinging the database. Supported database types are "postgres" and "sqlite".
+// On success, it sets the activeDB and activeConnID fields of the App.
+// Returns an error if the connection configuration is not found, the database type is unsupported,
+// or if any step in the connection process fails.
+func (a *App) ConnectToDatabase(id uint) error {
+	var connection Connection
+
+	if err := a.configDB.Find(&connection, id).Error; err != nil {
+		return fmt.Errorf("connection not found: %v", err)
+	}
+
+	var db *gorm.DB
+	var err error
+
+	switch connection.Type {
+	case "postgres":
+		db, err = gorm.Open(postgres.Open(connection.DSN), &gorm.Config{})
+	case "sqlite":
+		db, err = gorm.Open(sqlite.Open(connection.DSN), &gorm.Config{})
+	default:
+		return fmt.Errorf("unsupported database type: %s", connection.Type)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %v", err)
+	}
+
+	// Test the connection to the database
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %v", err)
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %v", err)
+	}
+
+	a.activeDB = db
+	a.activeConnID = id
+
+	log.Printf("[DB] Connected to database: %s", connection.Name)
 	return nil
 }
