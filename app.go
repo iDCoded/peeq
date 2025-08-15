@@ -67,6 +67,11 @@ func (a *App) startup(ctx context.Context) {
 	log.Println("[Peeq] Application initialized successfully")
 }
 
+// initConfigDB initializes the configuration database using SQLite and GORM.
+// It creates or opens the "config.db" file in the current directory, performs
+// auto-migration for the Connection model, and assigns the database instance
+// to the App's configDB field. Returns an error if database initialization or
+// migration fails.
 func (a *App) initConfigDB() error {
 	configPath := filepath.Join(".", "config.db")
 
@@ -85,6 +90,13 @@ func (a *App) initConfigDB() error {
 	return nil
 }
 
+// saveConnection saves a new database connection configuration with the specified
+// name, database type, and DSN (Data Source Name) into the application's configuration
+// database. It returns an error if the operation fails.
+// Parameters:
+//   - name:   the name to identify the connection
+//   - dbType: the type of the database (e.g., "mysql", "postgres")
+//   - dsn:    the data source name containing connection details
 func (a *App) saveConnection(name, dbType, dsn string) error {
 	conn := Connection{
 		Name: name,
@@ -97,5 +109,35 @@ func (a *App) saveConnection(name, dbType, dsn string) error {
 	}
 
 	log.Printf("[Config] Saved connection: %s (%s)", name, dbType)
+	return nil
+}
+
+// GetConnections retrieves all Connection records from the configDB.
+// It returns a slice of Connection and an error if the operation fails.
+func (a *App) GetConnections() ([]Connection, error) {
+	var connections []Connection
+
+	if err := a.configDB.Find(&connections).Error; err != nil {
+		return nil, fmt.Errorf("failed to get connections: %v", err)
+	}
+
+	return connections, nil
+}
+
+// DeleteConnection deletes a connection from the configuration database by its ID.
+// If the deleted connection is currently active, it closes the active connection.
+// Returns an error if the deletion fails.
+func (a *App) DeleteConnection(id uint) error {
+	if err := a.configDB.Delete(&Connection{}, id).Error; err != nil {
+		return fmt.Errorf("failed to delete connection: %v", err)
+	}
+
+	// Close active connection if it is the one being deleted
+	if a.activeConnID == id {
+		a.activeDB = nil
+		a.activeConnID = 0
+	}
+
+	log.Printf("[Config] Deleted connection with ID: %d", id)
 	return nil
 }
