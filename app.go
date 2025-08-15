@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -187,4 +188,75 @@ func (a *App) ConnectToDatabase(id uint) error {
 
 	log.Printf("[DB] Connected to database: %s", connection.Name)
 	return nil
+}
+
+// GetTables retrieves a list of tables from the currently active database connection.
+// For each table, it returns its name and the number of rows it contains.
+// Supports PostgreSQL and SQLite databases. Returns an error if there is no active
+// database connection, if the connection type is unsupported, or if any query fails.
+//
+// Returns:
+//   - []TableInfo: Slice containing information about each table (name and row count).
+//   - error: Non-nil if an error occurs during retrieval or querying.
+func (a *App) GetTables() ([]TableInfo, error) {
+	if a.activeDB == nil {
+		return nil, fmt.Errorf("no active database connection")
+	}
+
+	var tables []TableInfo
+	sqlDB, err := a.activeDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %v", err)
+	}
+
+	// Get connection information
+	var connection Connection
+	if err := a.configDB.First(&connection, a.activeConnID).Error; err != nil {
+		return nil, fmt.Errorf("failed to get connection info: %v", err)
+	}
+
+	var rows *sql.Rows
+
+	switch connection.Type {
+	case "postgres":
+		rows, err = sqlDB.Query(`
+			SELECT table_name
+			FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+		`)
+	case "sqlite":
+		rows, err = sqlDB.Query(`
+			SELECT name 
+			FROM sqlite_master 
+			WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		`)
+	default:
+		return nil, fmt.Errorf("unsupported database type for table listing: %s", connection.Type)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tables: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			continue
+		}
+
+		// Get row count for each table
+		var count int64
+		conutQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
+		if err := sqlDB.QueryRow(conutQuery).Scan(&count); err != nil {
+			count = 0 // set count to 0 if unable to get row count
+		}
+
+		tables = append(tables, TableInfo{
+			Name:     tableName,
+			RowCount: count,
+		})
+	}
+
+	return tables, nil
 }
