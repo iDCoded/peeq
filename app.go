@@ -260,3 +260,78 @@ func (a *App) GetTables() ([]TableInfo, error) {
 
 	return tables, nil
 }
+
+func (a *App) GetTableData(tableName string, offset, limit int) (*TableData, error) {
+	if a.activeDB == nil {
+		return nil, fmt.Errorf("no active database connection")
+	}
+
+	sqlDB, err := a.activeDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %v", err)
+	}
+
+	columns, err := a.getColumnInfo(tableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get column info: %v", err)
+	}
+
+	var total int64
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
+	if err := sqlDB.QueryRow(countQuery).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to get total count: %v", err)
+	}
+
+	// Get data with pagination
+	dataQuery := fmt.Sprintf("SELECT * FROM %s LIMIT %d OFFSET %d", tableName, limit, offset)
+	rows, err := sqlDB.Query(dataQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query table data: %v", err)
+	}
+	defer rows.Close()
+
+	columnNames, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get column names: %v", err)
+	}
+
+	var data []map[string]interface{}
+
+	for rows.Next() {
+		values := make([]interface{}, len(columnNames))
+		valuePtrs := make([]interface{}, len(columnNames))
+
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+
+		row := make(map[string]interface{})
+		for i, colName := range columnNames {
+			if values[i] != nil {
+				switch v := values[i].(type) {
+				case []byte:
+					row[colName] = string(v)
+				default:
+					row[colName] = v
+				}
+			} else {
+				row[colName] = nil
+			}
+		}
+
+		data = append(data, row)
+	}
+
+	return &TableData{
+		Columns: columns,
+		Rows:    data,
+		Total:   total,
+	}, nil
+
+}
+
+func (a *App) getColumnInfo(tableName string) ([]ColumnInfo, error) {}
