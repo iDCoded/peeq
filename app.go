@@ -334,4 +334,74 @@ func (a *App) GetTableData(tableName string, offset, limit int) (*TableData, err
 
 }
 
-func (a *App) getColumnInfo(tableName string) ([]ColumnInfo, error) {}
+func (a *App) getColumnInfo(tableName string) ([]ColumnInfo, error) {
+	sqlDB, err := a.activeDB.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get current connection info to determine database type
+	var connection Connection
+	if err := a.configDB.First(&connection, a.activeConnID).Error; err != nil {
+		return nil, err
+	}
+
+	var columns []ColumnInfo
+	var rows *sql.Rows
+
+	switch connection.Type {
+	case "postgres":
+		rows, err = sqlDB.Query(`
+			SELECT column_name, data_type, is_nullable, column_default,
+				   CASE WHEN constraint_type = 'PRIMARY KEY' THEN true ELSE false END as is_primary
+			FROM information_schema.columns c
+			LEFT JOIN information_schema.key_column_usage kcu ON c.table_name = kcu.table_name AND c.column_name = kcu.column_name
+			LEFT JOIN information_schema.table_constraints tc ON kcu.constraint_name = tc.constraint_name
+			WHERE c.table_name = $1
+			ORDER BY c.ordinal_position
+		`, tableName)
+	case "sqlite":
+		rows, err = sqlDB.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", connection.Type)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if connection.Type == "postgres" {
+		for rows.Next() {
+			var col ColumnInfo
+			var nullable, defaultVal sql.NullString
+			if err := rows.Scan(&col.Name, &col.Type, &nullable, &defaultVal, &col.IsPrimaryKey); err != nil {
+				continue
+			}
+			col.Nullable = nullable.String == "YES"
+			if defaultVal.Valid {
+				col.DefaultValue = defaultVal.String
+			}
+			columns = append(columns, col)
+		}
+	} else if connection.Type == "sqlite" {
+		for rows.Next() {
+			var cid int
+			var col ColumnInfo
+			var notNull int
+			var defaultVal sql.NullString
+			var pk int
+			if err := rows.Scan(&cid, &col.Name, &col.Type, &notNull, &defaultVal, &pk); err != nil {
+				continue
+			}
+			col.Nullable = notNull == 0
+			col.IsPrimaryKey = pk == 1
+			if defaultVal.Valid {
+				col.DefaultValue = defaultVal.String
+			}
+			columns = append(columns, col)
+		}
+	}
+
+	return columns, nil
+}
