@@ -420,3 +420,38 @@ func (a *App) getColumnInfo(tableName string) ([]ColumnInfo, error) {
 
 	return columns, nil
 }
+
+// TestConnection attempts to establish a connection to a database using the provided
+// database type and DSN (Data Source Name). Supported database types are "postgres"
+// and "sqlite". It returns an error if the connection cannot be established, the
+// underlying sql.DB cannot be retrieved, or the database cannot be pinged successfully.
+// If the connection is successful, it returns nil.
+func (a *App) TestConnection(dbType, dsn string) error {
+	var db *gorm.DB
+	var err error
+
+	switch dbType {
+	case "postgres":
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	case "sqlite":
+		db, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	default:
+		return fmt.Errorf("unsupported database type: %s", dbType)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to connect: %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %v", err)
+	}
+	defer sqlDB.Close()
+
+	if err := sqlDB.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %v", err)
+	}
+
+	return nil
+}

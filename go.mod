@@ -5,9 +5,9 @@ go 1.23.0
 toolchain go1.24.5
 
 require (
-	github.com/joho/godotenv v1.5.1
 	github.com/wailsapp/wails/v2 v2.10.2
 	gorm.io/driver/postgres v1.6.0
+	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.1
 )
 
@@ -47,7 +47,6 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	gorm.io/driver/sqlite v1.6.0 // indirect
 )
 
 // replace github.com/wailsapp/wails/v2 v2.10.2 => C:\Users\anand\go\pkg\mod
