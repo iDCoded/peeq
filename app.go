@@ -261,6 +261,11 @@ func (a *App) GetTables() ([]TableInfo, error) {
 	return tables, nil
 }
 
+// GetTableData retrieves paginated data from the specified table in the active database connection.
+// It returns a TableData struct containing column information, rows of data, and the total row count.
+// The function takes the table name, offset, and limit as parameters for pagination.
+// Returns an error if there is no active database connection, if column info cannot be retrieved,
+// or if any query fails.
 func (a *App) GetTableData(tableName string, offset, limit int) (*TableData, error) {
 	if a.activeDB == nil {
 		return nil, fmt.Errorf("no active database connection")
@@ -334,6 +339,16 @@ func (a *App) GetTableData(tableName string, offset, limit int) (*TableData, err
 
 }
 
+// getColumnInfo retrieves metadata about the columns of a specified table from the active database connection.
+// It supports both PostgreSQL and SQLite databases, returning a slice of ColumnInfo structs containing details
+// such as column name, data type, nullability, default value, and primary key status.
+//
+// Parameters:
+//   - tableName: The name of the table for which column information is requested.
+//
+// Returns:
+//   - []ColumnInfo: A slice containing metadata for each column in the specified table.
+//   - error: An error if the operation fails or the database type is unsupported.
 func (a *App) getColumnInfo(tableName string) ([]ColumnInfo, error) {
 	sqlDB, err := a.activeDB.DB()
 	if err != nil {
